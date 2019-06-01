@@ -18,7 +18,7 @@ static NSTimeInterval const kAnimationDuration = 0.4f;
 
 static CGFloat const kBorderLineWidth = 1.f;
 
-static CGFloat const kGoldenRatio = 1.61803398875f;
+static CGFloat const kGoldenRatio = 2;
 static CGFloat const kDecreasedGoldenRatio = 1.38;
 
 static CGFloat const kEnabledOpacity = 1.f;
@@ -65,7 +65,7 @@ static CGFloat const kDisabledOpacity = 0.5f;
 // ---------------------------------------------------------------------------------------
 
 @implementation ITSwitch
-@synthesize tintColor = _tintColor, disabledBorderColor = _disabledBorderColor;
+@synthesize tintColor = _tintColor;
 
 
 
@@ -105,16 +105,14 @@ static CGFloat const kDisabledOpacity = 0.5f;
     //_rootLayer.delegate = self;
     self.layer = _rootLayer;
     self.wantsLayer = YES;
+    self.layer.masksToBounds = NO;
     
-    // Allow shadow to flow over bounds of the layer
-    _rootLayer.masksToBounds = NO;
-
     // Background layer
     _backgroundLayer = [CALayer layer];
     _backgroundLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
     _backgroundLayer.bounds = _rootLayer.bounds;
     _backgroundLayer.anchorPoint = (CGPoint){ .x = 0.f, .y = 0.f };
-    _backgroundLayer.borderWidth = kBorderLineWidth;
+    _backgroundLayer.borderWidth = 0;
     [_rootLayer addSublayer:_backgroundLayer];
     
     // Knob layer
@@ -124,8 +122,8 @@ static CGFloat const kDisabledOpacity = 0.5f;
     _knobLayer.backgroundColor = [kKnobBackgroundColor  CGColor];
     _knobLayer.shadowColor = [[NSColor blackColor] CGColor];
     _knobLayer.shadowOffset = (CGSize){ .width = 0.f, .height = -2.f };
-    _knobLayer.shadowRadius = 1.f;
-    _knobLayer.shadowOpacity = 0.3f;
+    _knobLayer.shadowRadius = .5f;
+    _knobLayer.shadowOpacity = 0.1f;
     [_rootLayer addSublayer:_knobLayer];
     
     _knobInsideLayer = [CALayer layer];
@@ -134,8 +132,8 @@ static CGFloat const kDisabledOpacity = 0.5f;
     _knobInsideLayer.shadowColor = [[NSColor blackColor] CGColor];
     _knobInsideLayer.shadowOffset = (CGSize){ .width = 0.f, .height = 0.f };
     _knobInsideLayer.backgroundColor = [[NSColor whiteColor] CGColor];
-    _knobInsideLayer.shadowRadius = 1.f;
-    _knobInsideLayer.shadowOpacity = 0.35f;
+    _knobInsideLayer.shadowRadius = .5f;
+    _knobInsideLayer.shadowOpacity = 0.1f;
     [_knobLayer addSublayer:_knobInsideLayer];
     
     // Initial
@@ -179,22 +177,27 @@ static CGFloat const kDisabledOpacity = 0.5f;
 #pragma mark - Update Layer
 // ----------------------------------------------------
 
-- (void)reloadLayer {
+- (void)reloadLayerAnimated {
     [CATransaction begin];
     [CATransaction setAnimationDuration:kAnimationDuration];
-    {
-        // ------------------------------- Animate Border
-        // The green part also animates, which looks kinda weird
-        // We'll use the background-color for now
-        //        _backgroundLayer.borderWidth = (YES || self.isActive || self.isOn) ? NSHeight(_backgroundLayer.bounds) / 2 : kBorderLineWidth;
-        
-        // ------------------------------- Animate Colors
+    [self reloadLayer];
+    [CATransaction commit];
+}
+
+- (void)reloadLayer {
+    
         if (([self hasDragged] && [self isDraggingTowardsOn]) || (![self hasDragged] && [self checked])) {
-            _backgroundLayer.borderColor = [self.tintColor CGColor];
-            _backgroundLayer.backgroundColor = [self.tintColor CGColor];
+            NSColor *color = [self.tintColor colorWithAlphaComponent:0.5];
+            _backgroundLayer.borderColor = [color CGColor];
+            _backgroundLayer.backgroundColor = [color CGColor];
+            _knobLayer.backgroundColor = [self.tintColor CGColor];
+            _knobInsideLayer.backgroundColor = [self.tintColor CGColor];
         } else {
-            _backgroundLayer.borderColor = [self.disabledBorderColor CGColor];
-            _backgroundLayer.backgroundColor = [kDisabledBackgroundColor CGColor];
+            NSColor *color = [NSColor colorWithWhite:1 alpha:0.1];
+            _backgroundLayer.borderColor = [color CGColor];
+            _backgroundLayer.backgroundColor = [color CGColor];
+            _knobLayer.backgroundColor = [color CGColor];
+            _knobInsideLayer.backgroundColor = [color CGColor];
         }
         
         // ------------------------------- Animate Enabled-Disabled state
@@ -208,8 +211,6 @@ static CGFloat const kDisabledOpacity = 0.5f;
         
         self.knobLayer.frame = [self rectForKnob];
         self.knobInsideLayer.frame = self.knobLayer.bounds;
-    }
-    [CATransaction commit];
 }
 
 - (void)reloadLayerSize {
@@ -233,8 +234,7 @@ static CGFloat const kDisabledOpacity = 0.5f;
 
 - (CGRect)rectForKnob {
     CGFloat height = [self knobHeightForSize:_backgroundLayer.bounds.size];
-    CGFloat width = ![self isActive] ? (NSWidth(_backgroundLayer.bounds) - 2.f * kBorderLineWidth) * 1.f / kGoldenRatio :
-    (NSWidth(_backgroundLayer.bounds) - 2.f * kBorderLineWidth) * 1.f / kDecreasedGoldenRatio;
+    CGFloat width = height;
     CGFloat x = ((![self hasDragged] && ![self checked]) || (self.hasDragged && ![self isDraggingTowardsOn])) ?
     kBorderLineWidth :
     NSWidth(_backgroundLayer.bounds) - width - kBorderLineWidth;
@@ -350,7 +350,7 @@ static CGFloat const kDisabledOpacity = 0.5f;
         [self propagateValue:@(checked) forBinding:@"checked"];
     }
     
-    [self reloadLayer];
+    [self reloadLayerAnimated];
 }
 
 - (NSColor *)tintColor {
@@ -365,21 +365,22 @@ static CGFloat const kDisabledOpacity = 0.5f;
     [self reloadLayer];
 }
 
-- (NSColor *)disabledBorderColor {
-    if (!_disabledBorderColor) return kDisabledBorderColor;
-    
-    return _disabledBorderColor;
-}
-
-- (void)setDisabledBorderColor:(NSColor *)disabledBorderColor {
-    _disabledBorderColor = disabledBorderColor;
-    
-    [self reloadLayer];
-}
-
 - (void)setEnabled:(BOOL)enabled {
     [super setEnabled:enabled];
     [self reloadLayer];
+}
+
+- (void)setChecked:(BOOL)checked animated:(BOOL)animated {
+    if (animated) {
+        self.checked = checked;
+    } else {
+        if (_checked != checked) {
+            _checked = checked;
+            [self propagateValue:@(checked) forBinding:@"checked"];
+        }
+        
+        [self reloadLayer];
+    }
 }
 
 // -----------------------------------
@@ -387,8 +388,15 @@ static CGFloat const kDisabledOpacity = 0.5f;
 // -----------------------------------
 
 - (void)_invokeTargetAction {
-    if (self.action)
-        [NSApp sendAction:self.action to:self.target from:self];
+    if (self.target && self.action) {
+        NSMethodSignature *signature = [[self.target class] instanceMethodSignatureForSelector:self.action];
+        NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+        [invocation setTarget:self.target];
+        [invocation setSelector:self.action];
+        [invocation setArgument:(void *)&self atIndex:2];
+        
+        [invocation invoke];
+    }
 }
 
 // -----------------------------------
